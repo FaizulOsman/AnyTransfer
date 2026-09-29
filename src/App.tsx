@@ -1,3 +1,5 @@
+'use client';
+
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -5,11 +7,11 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useWebRTC } from './hooks/useWebRTC';
-import { ConnectPage } from './pages/ConnectPage';
-import { PairingPage } from './pages/PairingPage';
-import { TransfersPage } from './pages/TransfersPage';
-import { ArchitecturePage } from './pages/ArchitecturePage';
-import { SettingsPage } from './pages/SettingsPage';
+import { ConnectPage } from './views/ConnectPage';
+import { PairingPage } from './views/PairingPage';
+import { TransfersPage } from './views/TransfersPage';
+import { ArchitecturePage } from './views/ArchitecturePage';
+import { SettingsPage } from './views/SettingsPage';
 import { IncomingTransferModal } from './components/IncomingTransferModal';
 import { TransferProgress } from './components/TransferProgress';
 import { PeerDevice } from './types/transfer';

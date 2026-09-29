@@ -4,11 +4,16 @@ import { WebSocketServer, WebSocket } from 'ws';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import crypto from 'crypto';
+import next from 'next';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const isProd = process.env.NODE_ENV === 'production';
 const PORT = parseInt(process.env.PORT || '3000', 10);
+
+const dev = !isProd;
+const nextApp = next({ dev, hostname: '0.0.0.0', port: PORT });
+const handle = nextApp.getRequestHandler();
 
 interface ClientPeer {
   id: string;
@@ -152,6 +157,8 @@ function notifyPeerLeft(client: ClientPeer) {
 }
 
 async function startServer() {
+  await nextApp.prepare();
+
   const app = express();
   const server = http.createServer(app);
 
@@ -423,23 +430,13 @@ async function startServer() {
     }
   }, 30000);
 
-  // Vite middleware in dev or static files in production
-  if (!isProd) {
-    const { createServer: createViteServer } = await import('vite');
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: 'spa',
-    });
-    app.use(vite.middlewares);
-  } else {
-    app.use(express.static(path.join(__dirname, 'dist')));
-    app.get('*', (_req: Request, res: Response) => {
-      res.sendFile(path.join(__dirname, 'dist', 'index.html'));
-    });
-  }
+  // Next.js request handler
+  app.all('*', (req: Request, res: Response) => {
+    return handle(req, res);
+  });
 
   server.listen(PORT, '0.0.0.0', () => {
-    console.log(`[Any Transfer] Server listening on http://0.0.0.0:${PORT} (mode: ${isProd ? 'production' : 'development'})`);
+    console.log(`[Any Transfer] Server listening on http://0.0.0.0:${PORT} (mode: ${isProd ? 'production' : 'development'}, Next.js v16.3.7)`);
   });
 }
 
