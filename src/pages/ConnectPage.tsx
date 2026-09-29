@@ -27,8 +27,34 @@ export const ConnectPage: React.FC<ConnectPageProps> = ({
 }) => {
   return (
     <div className="w-full max-w-4xl mx-auto flex flex-col items-center animate-in fade-in duration-200">
-      {/* Editorial Header - Streamlined & Focused */}
-      <div className="w-full flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4 px-1">
+      {/* Central Radar Connection Canvas (Local Radar section) - order-1 on mobile/tablet, order-2 on desktop */}
+      <div className="w-full relative order-1 lg:order-2">
+        <Radar
+          selfDevice={selfDevice}
+          peers={peers}
+          roomId={roomId}
+          onSelectFilesForPeer={onSelectFilesForPeer}
+          onOpenPairingModal={onNavigateToPairing}
+        />
+
+        {/* Full Radar Drag-and-Drop Active Overlay */}
+        {isDraggingOverScreen && (
+          <div className="absolute inset-0 z-50 bg-cyan-950/90 border-2 border-dashed border-cyan-400 rounded-3xl flex flex-col items-center justify-center backdrop-blur-md animate-in fade-in duration-150 p-4 text-center">
+            <div className="w-16 h-16 rounded-2xl bg-cyan-500/20 border border-cyan-400/40 flex items-center justify-center mb-3">
+              <HardDrive className="w-8 h-8 text-cyan-300 animate-bounce" />
+            </div>
+            <h3 className="text-lg sm:text-xl font-bold text-white mb-1">
+              Drop Files to Transfer
+            </h3>
+            <p className="text-xs sm:text-sm text-cyan-200 max-w-sm">
+              Release anywhere to transmit immediately over WebRTC DataChannel to connected peers
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Connection Radar Section - order-2 under Local Radar on mobile/tablet, order-1 at top on desktop */}
+      <div className="w-full flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mt-4 lg:mt-0 lg:mb-4 px-1 order-2 lg:order-1">
         <div className="flex items-start sm:items-center gap-2.5 min-w-0 flex-1">
           <div className="w-9 h-9 rounded-full bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 shrink-0 mt-0.5 sm:mt-0">
             <Radio className="w-4 h-4 animate-pulse" />
@@ -62,34 +88,8 @@ export const ConnectPage: React.FC<ConnectPageProps> = ({
         </div>
       </div>
 
-      {/* Central Radar Connection Canvas */}
-      <div className="w-full relative">
-        <Radar
-          selfDevice={selfDevice}
-          peers={peers}
-          roomId={roomId}
-          onSelectFilesForPeer={onSelectFilesForPeer}
-          onOpenPairingModal={onNavigateToPairing}
-        />
-
-        {/* Full Radar Drag-and-Drop Active Overlay */}
-        {isDraggingOverScreen && (
-          <div className="absolute inset-0 z-50 bg-cyan-950/90 border-2 border-dashed border-cyan-400 rounded-3xl flex flex-col items-center justify-center backdrop-blur-md animate-in fade-in duration-150 p-4 text-center">
-            <div className="w-16 h-16 rounded-2xl bg-cyan-500/20 border border-cyan-400/40 flex items-center justify-center mb-3">
-              <HardDrive className="w-8 h-8 text-cyan-300 animate-bounce" />
-            </div>
-            <h3 className="text-lg sm:text-xl font-bold text-white mb-1">
-              Drop Files to Transfer
-            </h3>
-            <p className="text-xs sm:text-sm text-cyan-200 max-w-sm">
-              Release anywhere to transmit immediately over WebRTC DataChannel to connected peers
-            </p>
-          </div>
-        )}
-      </div>
-
       {/* Ambient Quick Instructions & Peer Summary Banner */}
-      <div className="w-full flex flex-col sm:flex-row items-center justify-between gap-3 mt-4 px-2 py-2 rounded-2xl bg-slate-900/60 border border-slate-800/80 text-xs text-slate-400 backdrop-blur-sm">
+      <div className="w-full flex flex-col sm:flex-row items-center justify-between gap-3 mt-4 px-2 py-2 rounded-2xl bg-slate-900/60 border border-slate-800/80 text-xs text-slate-400 backdrop-blur-sm order-3">
         <div className="flex items-center gap-2">
           <div className="w-6 h-6 rounded-lg bg-slate-800 flex items-center justify-center text-cyan-400 shrink-0">
             <Sparkles className="w-3 h-3" />
