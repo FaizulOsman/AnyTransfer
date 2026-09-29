@@ -31,6 +31,8 @@ export function useWebRTC() {
   const wsRef = useRef<WebSocket | null>(null);
   const webrtcManagerRef = useRef<WebRTCManager | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const selfIdRef = useRef<string>('');
 
   const showToast = useCallback((text: string, type: 'info' | 'success' | 'error' = 'info') => {
     const id = Math.random().toString(36).substring(2, 7);
@@ -40,40 +42,160 @@ export function useWebRTC() {
     }, 4000);
   }, []);
 
-  // Update peer status helper
   const updatePeerStatus = useCallback((peerId: string, status: PeerDevice['status']) => {
     setPeers((prev) =>
       prev.map((p) => (p.id === peerId ? { ...p, status } : p))
     );
   }, []);
 
+  // Universal Signaling Message Sender (Supports both WebSocket & Vercel Serverless HTTP)
+  const sendSignalingMessage = useCallback(async (msg: any) => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify(msg));
+      return;
+    }
+
+    // Fallback to Serverless API Route (/api/signaling)
+    try {
+      const type = msg.type;
+      const action =
+        type === 'join' ? 'register' :
+        type === 'signal' ? 'signal' :
+        type === 'relay_transfer' ? 'relay_transfer' :
+        type === 'create_room' ? 'create_room' :
+        type === 'join_room' ? 'join_room' :
+        type === 'leave_room' ? 'leave_room' : type;
+
+      const currentPeerId = selfIdRef.current || msg.peerId;
+      const body: any = {
+        action,
+        peerId: currentPeerId,
+        device: msg.device,
+        room: msg.room,
+        to: msg.to,
+        data: msg.data,
+      };
+
+      const res = await fetch('/api/signaling', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+      const resData = await res.json();
+
+      if (resData.ok) {
+        if (action === 'create_room' || action === 'join_room') {
+          setRoomId(resData.room || null);
+          if (resData.room) {
+            showToast(`Joined remote room #${resData.room}`, 'success');
+          }
+        } else if (action === 'leave_room') {
+          setRoomId(null);
+          showToast('Left remote room, returned to local radar', 'info');
+        }
+      } else if (resData.error && action === 'join_room') {
+        showToast(resData.error, 'error');
+      }
+    } catch (err) {
+      console.warn('[Serverless Signaling] Send error:', err);
+    }
+  }, [showToast]);
+
+  // Serverless HTTP Polling Loop for Vercel
+  const startServerlessPolling = useCallback(async (presetPeerId?: string) => {
+    if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+
+    const peerId = presetPeerId || selfIdRef.current || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 11));
+    selfIdRef.current = peerId;
+    webrtcManagerRef.current?.setSelfId(peerId);
+
+    const { deviceType, os, browser, modelName } = detectDevice();
+    const savedName = typeof window !== 'undefined' ? localStorage.getItem('aetherdrop_device_name') : null;
+    const savedAvatar = typeof window !== 'undefined' ? localStorage.getItem('aetherdrop_avatar') : null;
+    const effectiveName = savedName || modelName || 'Device';
+    const effectiveAvatar = savedAvatar || 'wolf';
+
+    setSelfDevice((prev) => ({
+      ...prev,
+      id: peerId,
+      name: effectiveName,
+      avatar: effectiveAvatar,
+    }));
+
+    // Register with Serverless API
+    try {
+      await fetch('/api/signaling', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'register',
+          peerId,
+          device: {
+            name: effectiveName,
+            modelName,
+            avatar: effectiveAvatar,
+            deviceType,
+            os,
+            browser,
+          },
+          room: roomId || undefined,
+        }),
+      });
+      setIsConnected(true);
+    } catch (e) {
+      console.warn('[Serverless Register] Error:', e);
+    }
+
+    // Poll serverless signaling endpoint every 1.5 seconds
+    pollIntervalRef.current = setInterval(async () => {
+      try {
+        const res = await fetch('/api/signaling', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'poll', peerId: selfIdRef.current }),
+        });
+        const data = await res.json();
+
+        if (data.ok) {
+          setIsConnected(true);
+          if (Array.isArray(data.peers)) {
+            setPeers(data.peers);
+          }
+          if (Array.isArray(data.messages)) {
+            for (const msg of data.messages) {
+              if (msg.type === 'signal' && msg.from && msg.data) {
+                webrtcManagerRef.current?.handleSignaling(msg.from, msg.data);
+              } else if (msg.type === 'relay_transfer' && msg.from && msg.data) {
+                webrtcManagerRef.current?.handleRelayMessage(msg.from, msg.data);
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('[Serverless Poll] Error:', err);
+      }
+    }, 1500);
+  }, [roomId]);
+
   // Initialize WebRTC Manager
   useEffect(() => {
     const manager = new WebRTCManager({
       onSignalingSend: (to, data) => {
-        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-          wsRef.current.send(
-            JSON.stringify({
-              type: 'signal',
-              to,
-              data,
-            })
-          );
-        }
+        sendSignalingMessage({
+          type: 'signal',
+          to,
+          data,
+        });
       },
       onRelaySend: (to, data) => {
-        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-          wsRef.current.send(
-            JSON.stringify({
-              type: 'relay_transfer',
-              to,
-              data,
-            })
-          );
-        }
+        sendSignalingMessage({
+          type: 'relay_transfer',
+          to,
+          data,
+        });
       },
       onIncomingTransferRequest: (transfer) => {
-        // Find sender peer name
         setPeers((currPeers) => {
           const sender = currPeers.find((p) => p.id === transfer.peerId);
           if (sender) {
@@ -109,7 +231,6 @@ export function useWebRTC() {
           'success'
         );
 
-        // Auto download files if direction is download
         if (completedTransfer.direction === 'download' && completedTransfer.assembledBlobs) {
           for (const file of completedTransfer.files) {
             const blob = completedTransfer.assembledBlobs[file.id];
@@ -148,9 +269,9 @@ export function useWebRTC() {
     return () => {
       manager.cleanup();
     };
-  }, [showToast, updatePeerStatus]);
+  }, [sendSignalingMessage, showToast, updatePeerStatus]);
 
-  // Connect to Signaling Server via WebSocket
+  // Connect to Signaling Server (Tries WebSocket first, falls back to Vercel Serverless HTTP)
   const connectSignaling = useCallback(() => {
     if (typeof window === 'undefined') return;
 
@@ -161,11 +282,23 @@ export function useWebRTC() {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.host}/ws`;
 
+    let wsConnected = false;
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
+    const connectionTimeout = setTimeout(() => {
+      if (!wsConnected && ws.readyState !== WebSocket.OPEN) {
+        console.log('[Signaling] WebSocket connection timed out, switching to Serverless mode');
+        ws.close();
+        startServerlessPolling();
+      }
+    }, 2000);
+
     ws.onopen = () => {
+      wsConnected = true;
+      clearTimeout(connectionTimeout);
       setIsConnected(true);
+      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
         reconnectTimeoutRef.current = null;
@@ -173,15 +306,20 @@ export function useWebRTC() {
     };
 
     ws.onclose = () => {
-      setIsConnected(false);
-      // Auto-reconnect after 2.5s
-      reconnectTimeoutRef.current = setTimeout(() => {
-        connectSignaling();
-      }, 2500);
+      if (wsConnected) {
+        setIsConnected(false);
+        reconnectTimeoutRef.current = setTimeout(() => {
+          connectSignaling();
+        }, 2500);
+      }
     };
 
-    ws.onerror = (err) => {
-      console.warn('[Signaling] WebSocket error:', err);
+    ws.onerror = () => {
+      if (!wsConnected) {
+        clearTimeout(connectionTimeout);
+        console.log('[Signaling] WebSocket failed to connect, switching to Serverless mode');
+        startServerlessPolling();
+      }
     };
 
     ws.onmessage = (event) => {
@@ -194,7 +332,6 @@ export function useWebRTC() {
               const savedName = typeof window !== 'undefined' ? localStorage.getItem('aetherdrop_device_name') : null;
               const savedAvatar = typeof window !== 'undefined' ? localStorage.getItem('aetherdrop_avatar') : null;
               
-              // Device model name is the primary device identity
               const effectiveName = savedName || prev.modelName || msg.device?.name || 'Device';
               const effectiveAvatar = savedAvatar || prev.avatar || msg.device?.avatar || 'wolf';
 
@@ -205,9 +342,9 @@ export function useWebRTC() {
                 avatar: effectiveAvatar,
                 ipSubnet: msg.device?.ipSubnet,
               };
+              selfIdRef.current = msg.peerId;
               webrtcManagerRef.current?.setSelfId(msg.peerId);
 
-              // Send join message with self info
               const { deviceType, os, browser } = detectDevice();
               ws.send(
                 JSON.stringify({
@@ -293,7 +430,7 @@ export function useWebRTC() {
         console.error('[Signaling] Failed to process message:', err);
       }
     };
-  }, [roomId, showToast]);
+  }, [roomId, showToast, startServerlessPolling]);
 
   useEffect(() => {
     connectSignaling();
@@ -303,6 +440,9 @@ export function useWebRTC() {
       }
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
+      }
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
       }
     };
   }, [connectSignaling]);
@@ -318,7 +458,7 @@ export function useWebRTC() {
     }
   }, []);
 
-  // Check Client Hints for high-accuracy device model (e.g. Realme C35, Galaxy S24, Pixel)
+  // Check Client Hints for high-accuracy device model
   useEffect(() => {
     getAccurateDeviceModel().then((model) => {
       if (model) {
@@ -331,27 +471,23 @@ export function useWebRTC() {
             name: finalName,
           };
 
-          if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-            wsRef.current.send(
-              JSON.stringify({
-                type: 'join',
-                device: {
-                  name: updated.name,
-                  modelName: model,
-                  avatar: updated.avatar,
-                  deviceType: updated.deviceType,
-                  os: updated.os,
-                  browser: updated.browser,
-                },
-                room: roomId || undefined,
-              })
-            );
-          }
+          sendSignalingMessage({
+            type: 'join',
+            device: {
+              name: updated.name,
+              modelName: model,
+              avatar: updated.avatar,
+              deviceType: updated.deviceType,
+              os: updated.os,
+              browser: updated.browser,
+            },
+            room: roomId || undefined,
+          });
           return updated;
         });
       }
     });
-  }, [roomId]);
+  }, [roomId, sendSignalingMessage]);
 
   const updateDeviceName = useCallback((newName: string) => {
     const clean = newName.trim().slice(0, 32);
@@ -365,26 +501,22 @@ export function useWebRTC() {
         console.warn(e);
       }
 
-      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-        wsRef.current.send(
-          JSON.stringify({
-            type: 'join',
-            device: {
-              name: clean,
-              modelName: prev.modelName,
-              avatar: prev.avatar,
-              deviceType: prev.deviceType,
-              os: prev.os,
-              browser: prev.browser,
-            },
-            room: roomId || undefined,
-          })
-        );
-      }
+      sendSignalingMessage({
+        type: 'join',
+        device: {
+          name: clean,
+          modelName: prev.modelName,
+          avatar: prev.avatar,
+          deviceType: prev.deviceType,
+          os: prev.os,
+          browser: prev.browser,
+        },
+        room: roomId || undefined,
+      });
       return updated;
     });
     showToast(`Device name updated to "${clean}"`, 'success');
-  }, [roomId, showToast]);
+  }, [roomId, sendSignalingMessage, showToast]);
 
   const updateAvatar = useCallback((newAvatar: string) => {
     setSelfDevice((prev) => {
@@ -395,47 +527,36 @@ export function useWebRTC() {
         console.warn(e);
       }
 
-      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-        wsRef.current.send(
-          JSON.stringify({
-            type: 'join',
-            device: {
-              name: prev.name,
-              modelName: prev.modelName,
-              avatar: newAvatar,
-              deviceType: prev.deviceType,
-              os: prev.os,
-              browser: prev.browser,
-            },
-            room: roomId || undefined,
-          })
-        );
-      }
+      sendSignalingMessage({
+        type: 'join',
+        device: {
+          name: prev.name,
+          modelName: prev.modelName,
+          avatar: newAvatar,
+          deviceType: prev.deviceType,
+          os: prev.os,
+          browser: prev.browser,
+        },
+        room: roomId || undefined,
+      });
       return updated;
     });
     showToast(`Avatar set to ${newAvatar}`, 'success');
-  }, [roomId, showToast]);
+  }, [roomId, sendSignalingMessage, showToast]);
 
   const createRoom = useCallback(() => {
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: 'create_room' }));
-    }
-  }, []);
+    sendSignalingMessage({ type: 'create_room' });
+  }, [sendSignalingMessage]);
 
   const joinRoom = useCallback((code: string) => {
     const clean = code.trim().toUpperCase();
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: 'join_room', room: clean }));
-    }
-  }, []);
+    sendSignalingMessage({ type: 'join_room', room: clean });
+  }, [sendSignalingMessage]);
 
   const leaveRoom = useCallback(() => {
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: 'leave_room' }));
-      setRoomId(null);
-      showToast('Left remote room, returned to local radar', 'info');
-    }
-  }, [showToast]);
+    sendSignalingMessage({ type: 'leave_room' });
+    setRoomId(null);
+  }, [sendSignalingMessage]);
 
   const sendFilesToPeer = useCallback(async (peer: PeerDevice, files: File[]) => {
     if (!webrtcManagerRef.current) return;

@@ -162,8 +162,6 @@ async function startServer() {
   const app = express();
   const server = http.createServer(app);
 
-  app.use(express.json());
-
   // Health and STUN config endpoint
   app.get('/api/health', (_req: Request, res: Response) => {
     res.json({
