@@ -97,7 +97,7 @@ export const ConnectPage: React.FC<ConnectPageProps> = ({
           <span>
             {peers.length > 0
               ? `Select any nearby device on the radar to stream unlimited size files.`
-              : `Waiting for nearby peers to open AetherDrop on your Wi-Fi or cellular network.`}
+              : `Waiting for nearby peers to open Any Transfer on your Wi-Fi or cellular network.`}
           </span>
         </div>
 

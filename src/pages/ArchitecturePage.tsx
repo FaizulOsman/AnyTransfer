@@ -29,7 +29,7 @@ export const ArchitecturePage: React.FC<ArchitecturePageProps> = ({ onNavigateTo
             <span>Technical Deep Dive & Security</span>
           </div>
           <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
-            How AetherDrop Works
+            How Any Transfer Works
           </h1>
           <p className="text-xs sm:text-sm text-slate-400 mt-1">
             Zero-storage peer-to-peer file transmission powered by WebRTC SCTP, dual-transport failover, and hardware-accelerated checksums.

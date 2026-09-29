@@ -439,11 +439,11 @@ async function startServer() {
   }
 
   server.listen(PORT, '0.0.0.0', () => {
-    console.log(`[AetherDrop] Server listening on http://0.0.0.0:${PORT} (mode: ${isProd ? 'production' : 'development'})`);
+    console.log(`[Any Transfer] Server listening on http://0.0.0.0:${PORT} (mode: ${isProd ? 'production' : 'development'})`);
   });
 }
 
 startServer().catch((err) => {
-  console.error('[AetherDrop] Failed to start server:', err);
+  console.error('[Any Transfer] Failed to start server:', err);
   process.exit(1);
 });

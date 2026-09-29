@@ -153,12 +153,12 @@ export default function App() {
               onClick={() => navigateTo('connect')}
               className="flex items-center gap-2 group cursor-pointer text-left outline-none"
             >
-              <div className="w-8 h-8 rounded-full bg-slate-900 border border-cyan-500/40 flex items-center justify-center shadow-sm shadow-cyan-950/50 group-hover:scale-105 transition-transform shrink-0">
-                <AvatarImage avatar={selfDevice.avatar} className="w-5 h-5" />
+              <div className="w-8 h-8 rounded-xl bg-cyan-500/10 border border-cyan-400/30 flex items-center justify-center p-1 shadow-sm shadow-cyan-950/50 group-hover:scale-105 transition-transform shrink-0">
+                <img src="/logo.svg" alt="Any Transfer" className="w-full h-full object-contain" />
               </div>
               <div className="min-w-0">
                 <span className="text-base sm:text-lg font-bold tracking-tight text-white flex items-center gap-1 group-hover:text-cyan-300 transition-colors">
-                  AetherDrop
+                  Any Transfer
                 </span>
                 <span className="hidden xl:block text-[10px] text-slate-400 font-medium truncate max-w-[130px]">
                   {selfDevice.name || selfDevice.modelName || 'Device'}

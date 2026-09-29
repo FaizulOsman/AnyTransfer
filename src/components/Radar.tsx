@@ -163,7 +163,7 @@ export const Radar: React.FC<RadarProps> = ({
             </div>
             
             <p className="text-[11px] sm:text-xs text-slate-400 mb-2.5 leading-relaxed">
-              Open AetherDrop on another device to auto-discover, or pair across separate networks via code.
+              Open Any Transfer on another device to auto-discover, or pair across separate networks via code.
             </p>
 
             <div className="flex items-center justify-center gap-2 flex-wrap">

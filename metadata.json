@@ -1,5 +1,5 @@
 {
-  "name": "AetherDrop - WebRTC P2P File Transfer",
+  "name": "Any Transfer - WebRTC P2P File Transfer",
   "description": "High-performance, zero-size-limit peer-to-peer WebRTC file sharing with local radar discovery and cross-network 6-digit code pairing.",
   "requestFramePermissions": [],
   "majorCapabilities": [
