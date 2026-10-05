@@ -247,11 +247,11 @@ export function useWebRTC() {
 
     const connectionTimeout = setTimeout(() => {
       if (!wsConnected && ws.readyState !== WebSocket.OPEN) {
-        console.log('[Signaling] Native WebSocket connection timed out, enabling MQTT WebSockets engine');
+        console.log('[Signaling] Native WebSocket connection timed out after 10s, enabling MQTT WebSockets engine');
         ws.close();
         connectMqttFallback();
       }
-    }, 1800);
+    }, 10000);
 
     ws.onopen = () => {
       wsConnected = true;
@@ -264,9 +264,9 @@ export function useWebRTC() {
     };
 
     ws.onerror = () => {
-      if (!wsConnected) {
+      if (!wsConnected && ws.readyState === WebSocket.CLOSED) {
         clearTimeout(connectionTimeout);
-        console.log('[Signaling] Native WebSocket error, enabling MQTT WebSockets engine');
+        console.log('[Signaling] Native WebSocket closed with error, enabling MQTT WebSockets engine');
         connectMqttFallback();
       }
     };
