@@ -55,18 +55,40 @@ function generateFriendlyName(): string {
 
 function getSubnet(ip: string): string {
   if (!ip) return 'local_default';
-  // If IPv4 or IPv4-mapped IPv6 (::ffff:192.168.1.10)
-  const cleanIp = ip.replace(/^.*:/, '');
-  const parts = cleanIp.split('.');
-  if (parts.length === 4) {
-    // Group by first 3 octets (e.g. 192.168.1.x)
-    return `subnet_${parts.slice(0, 3).join('.')}`;
+
+  let cleanIp = ip.trim();
+  // Strip IPv4-mapped IPv6 prefix (e.g. ::ffff:192.168.1.10)
+  if (cleanIp.startsWith('::ffff:')) {
+    cleanIp = cleanIp.replace('::ffff:', '');
   }
-  // Fallback hash for IPv6 or others
-  return `subnet_${crypto.createHash('sha256').update(ip).digest('hex').slice(0, 8)}`;
+
+  // IPv4 case (e.g. 192.168.1.10 -> subnet_192.168.1)
+  const ipv4Parts = cleanIp.split('.');
+  if (ipv4Parts.length === 4) {
+    return `subnet_${ipv4Parts.slice(0, 3).join('.')}`;
+  }
+
+  // IPv6 case (e.g. 2001:db8:85a3:1234:5678:8a2e:370:7334)
+  if (cleanIp.includes(':')) {
+    // Take the first 4 hextets (/64 network prefix shared by devices on same Wi-Fi/router)
+    const hextets = cleanIp.split(':').filter(Boolean);
+    const prefix = hextets.slice(0, Math.min(4, hextets.length)).join(':');
+    return `subnet_v6_${crypto.createHash('sha256').update(prefix).digest('hex').slice(0, 8)}`;
+  }
+
+  // Fallback hash
+  return `subnet_${crypto.createHash('sha256').update(cleanIp).digest('hex').slice(0, 8)}`;
 }
 
 function getClientIp(req: http.IncomingMessage): string {
+  const cfIp = req.headers['cf-connecting-ip'];
+  if (typeof cfIp === 'string' && cfIp.trim()) {
+    return cfIp.trim();
+  }
+  const realIp = req.headers['x-real-ip'];
+  if (typeof realIp === 'string' && realIp.trim()) {
+    return realIp.trim();
+  }
   const forwarded = req.headers['x-forwarded-for'];
   if (typeof forwarded === 'string') {
     return forwarded.split(',')[0].trim();

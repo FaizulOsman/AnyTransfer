@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import crypto from 'crypto';
 
 interface PeerState {
   id: string;
@@ -76,9 +77,18 @@ export async function POST(req: NextRequest) {
 
     if (action === 'register') {
       const newPeerId = peerId || crypto.randomUUID();
-      const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0].trim() || '127.0.0.1';
-      const cleanIp = clientIp.replace(/^.*:/, '');
-      const subnet = `subnet_${cleanIp.split('.').slice(0, 3).join('.')}`;
+      const rawIp = req.headers.get('cf-connecting-ip') || req.headers.get('x-real-ip') || req.headers.get('x-forwarded-for')?.split(',')[0].trim() || '127.0.0.1';
+      let cleanIp = rawIp.trim();
+      if (cleanIp.startsWith('::ffff:')) cleanIp = cleanIp.replace('::ffff:', '');
+
+      let subnet = 'subnet_local';
+      if (cleanIp.split('.').length === 4) {
+        subnet = `subnet_${cleanIp.split('.').slice(0, 3).join('.')}`;
+      } else if (cleanIp.includes(':')) {
+        const hextets = cleanIp.split(':').filter(Boolean);
+        const prefix = hextets.slice(0, Math.min(4, hextets.length)).join(':');
+        subnet = `subnet_v6_${crypto.createHash('sha256').update(prefix).digest('hex').slice(0, 8)}`;
+      }
 
       const peer: PeerState = {
         id: newPeerId,
